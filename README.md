@@ -71,6 +71,44 @@ PYTHONPATH=src python -m finbalance.cli suite --agent oracle --seeds 0:20 --k 5 
 PYTHONPATH=src python -m finbalance.cli suite --agent baseline --seeds 0:20 --k 5 --runs 3
 ```
 
+**Run the LLM agent** — install the optional dependencies and configure one
+OpenAI-compatible chat-completions endpoint that supports tool calling:
+
+```bash
+uv sync --extra llm
+cp .env_example .env
+# Edit .env: set LLM_BASE_URL (including /v1 where required), LLM_API_KEY, LLM_MODEL.
+uv run --extra llm finbalance suite --agent llm --seeds 0:1 --runs 1
+# Repeatable suite, using the same settings/seeds as the comparison agent:
+uv run --extra llm finbalance suite --agent llm --seeds 0:20 --k 5 --runs 3
+```
+
+The agent loads `.env` from the current working directory when initialized;
+existing environment variables take precedence. `.env` is ignored by Git.
+Keep the endpoint and model identifier with experiment notes, never the API key.
+Missing configuration or optional dependencies produces a failed attempt with
+an actionable error. The suite API retains errors in `SuiteResult.attempts`;
+the CLI prints aggregate failure counts, latency summaries, and the first failure
+reason. Use `uv run --extra llm` to select the project environment; a system
+`python3` may not have the optional dependencies installed.
+
+The [Pydantic AI](https://ai.pydantic.dev/output/) agent uses the existing six
+session operations, with submission as its terminal output tool. Its prompt
+includes the public fixed chart from `coa.py`, including normal balance sides
+and protected-account flags. It has no access to ground truth. Tool calls execute
+sequentially, with at most 40 model requests and a 60-second timeout per request;
+provider transport retries are disabled. A text answer without submission, an
+exhausted request limit, or a provider error is a failed attempt. Model setup is
+outside the existing `agent.run()` timer. Reference commands need no LLM
+dependencies or credentials. LLM campaign support is outside this initial task.
+
+For the mocked agent tests, install both extras:
+
+```bash
+uv sync --extra llm --extra dev
+uv run pytest -q
+```
+
 **Run a multi-month campaign** — the long-horizon dimension, where the agent's own
 carried-forward balances make errors compound:
 

@@ -139,9 +139,18 @@ class SloppyAgent:
 
 
 # Registry so the CLI/suite can select an agent by name.
+def _llm_agent():
+    try:
+        from .llm_agent import LlmAgent
+    except ImportError as exc:
+        raise ImportError("LLM agent dependencies are missing. Run: uv sync --extra llm") from exc
+    return LlmAgent()
+
+
 AGENTS = {
     "oracle": OracleAgent,
     "baseline": BaselineAgent,
     "sloppy": SloppyAgent,
     "null": NullAgent,
+    "llm": _llm_agent,
 }

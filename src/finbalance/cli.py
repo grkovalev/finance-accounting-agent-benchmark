@@ -104,7 +104,12 @@ def cmd_score(args) -> int:
 def cmd_suite(args) -> int:
     from .suite import format_suite, run_suite
     lo, hi = (int(x) for x in args.seeds.split(":"))
-    print(format_suite(run_suite(args.agent, range(lo, hi), runs=args.runs, k=args.k)))
+    result = run_suite(args.agent, range(lo, hi), runs=args.runs, k=args.k)
+    print(format_suite(result))
+    first_failure = next((a for a in result.attempts if a.outcome == "failed"), None)
+    if first_failure is not None:
+        print(f"  first failure (seed={first_failure.seed}, repetition={first_failure.repetition}): "
+              f"{first_failure.error}")
     return 0
 
 
@@ -126,7 +131,7 @@ def main(argv=None) -> int:
     d.set_defaults(func=cmd_demo)
 
     su = sub.add_parser("suite", help="evaluate an agent over a seed range (pass^k, per-type)")
-    su.add_argument("--agent", default="baseline", choices=["oracle", "baseline", "sloppy", "null"])
+    su.add_argument("--agent", default="baseline", choices=list(AGENTS))
     su.add_argument("--seeds", default="0:50", help="range as LO:HI")
     su.add_argument("--runs", type=int, default=1, help="runs per seed (for pass^k)")
     su.add_argument("--k", type=int, default=5)
