@@ -147,10 +147,19 @@ def _llm_agent():
     return LlmAgent()
 
 
+def _jev_agent():
+    try:
+        from .jev_agent import JevAgent
+    except ImportError as exc:
+        raise ImportError("JEV agent dependencies are missing. Run: uv sync --extra jev") from exc
+    return JevAgent()
+
+
 AGENTS = {
     "oracle": OracleAgent,
     "baseline": BaselineAgent,
     "sloppy": SloppyAgent,
     "null": NullAgent,
     "llm": _llm_agent,
+    "jev": _jev_agent,
 }

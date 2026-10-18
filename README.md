@@ -16,7 +16,7 @@ The full design writeup is in [`proposal/proposal.md`](proposal/proposal.md).
 
 ## Quickstart (one command, zero dependencies)
 
-The reference implementation is pure Python standard library (Python ≥ 3.10).
+The reference implementation is pure Python standard library (Python ≥ 3.11).
 
 ```bash
 PYTHONPATH=src python -m finbalance.cli demo --seed 1
@@ -102,10 +102,56 @@ exhausted request limit, or a provider error is a failed attempt. Model setup is
 outside the existing `agent.run()` timer. Reference commands need no LLM
 dependencies or credentials. LLM campaign support is outside this initial task.
 
-For the mocked agent tests, install both extras:
+**Run the JEV agent with GPT fallback** — install the optional TypeSafe dependencies:
 
 ```bash
-uv sync --extra llm --extra dev
+uv sync --extra jev --extra dev
+# Add the TYPESAFE_* and JEV_* settings from .env_example to your .env.
+# Keep existing LLM_* settings for GPT fallback.
+uv run --extra jev finbalance suite --agent jev --seeds 1000:1001 --runs 1
+```
+
+JEV uses the same prompt, session tools and Pydantic AI loop as the LLM baseline.
+Its model is `FallbackModel(TypeSafeModel(...), GPT, fallback_on=DecisionHandOff)`.
+JEV attempts each step first; unsupported native routes hand that step to GPT.
+Subsequent steps start with JEV again, using the same message and tool-result history.
+There is no custom graph, separate grader or accounting solver.
+
+Read arguments use public account codes and document IDs already returned by
+`list_documents`. GPT can construct journal entries, interpret evidence and fill
+submission mappings. Its usage is measured rather than capped at one call; fallback
+may be frequent for free-form arguments. Backend outages fail explicitly.
+
+Configure `TYPESAFE_API_KEY`, `TYPESAFE_BASE_URL` (default
+`https://api.typesafe.ai`) and `TYPESAFE_DEFAULT_MODEL` (default `jev-latest`),
+plus the existing three `LLM_*` settings for fallback. `JEV_ALLOW_LLM_ESCALATION=false`
+disables GPT without requiring its configuration; unsupported JEV routes then fail
+explicitly. The former `JEV_MAX_LLM_REQUESTS` and `JEV_MIN_CONFIDENCE` settings are
+removed and ignored. `.env` loads without overriding environment variables.
+
+Limits are 40 actual provider calls shared by JEV/GPT, 60 seconds per request and
+300 seconds per run. Native routing and argument filling count separately, as do
+validation retries. `agent.requests` exposes per-run JEV/GPT counts, and budget
+failures include both. Submission ends the run; exhaustion never forces submission.
+
+The optional model dependencies are pinned to Pydantic AI `2.57.0` and
+require Python 3.11+. Pin the tested JEV model version instead of a moving alias
+before evaluating. Use development seeds such as `1000:1020` for prompt changes;
+freeze settings before comparing on the agreed evaluation seeds:
+
+```bash
+uv run --extra jev finbalance suite --agent llm --seeds 0:20 --k 5 --runs 3
+uv run --extra jev finbalance suite --agent jev --seeds 0:20 --k 5 --runs 3
+JEV_ALLOW_LLM_ESCALATION=false uv run --extra jev finbalance suite --agent jev --seeds 0:20 --k 5 --runs 3
+```
+
+These compare complete systems, including JEV's routing and GPT fallback. A missing TypeSafe key produces an actionable setup failure; the
+mocked tests do not establish live accuracy.
+
+For the mocked tests for both agents, install the JEV and development extras:
+
+```bash
+uv sync --extra jev --extra dev
 uv run pytest -q
 ```
 

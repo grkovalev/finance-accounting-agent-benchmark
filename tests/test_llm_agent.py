@@ -194,7 +194,7 @@ def test_reference_agents_without_optional_dependencies():
 import sys
 class BlockOptional:
     def find_spec(self, fullname, *args):
-        if fullname.split('.')[0] in {'pydantic_ai', 'dotenv', 'openai'}:
+        if fullname.split('.')[0] in {'pydantic_ai', 'pydantic_graph', 'typesafe_sdk', 'dotenv', 'openai'}:
             raise ImportError('blocked optional dependency')
 sys.meta_path.insert(0, BlockOptional())
 from finbalance.cli import main
@@ -206,6 +206,12 @@ except ImportError as exc:
     assert 'uv sync --extra llm' in str(exc)
 else:
     raise AssertionError('expected missing dependency error')
+try:
+    AGENTS['jev']()
+except ImportError as exc:
+    assert 'uv sync --extra jev' in str(exc)
+else:
+    raise AssertionError('expected missing JEV dependency error')
 '''
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                             env={**os.environ, "PYTHONPATH": "src"})

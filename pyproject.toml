@@ -7,14 +7,15 @@ name = "finbalance"
 version = "0.1.0"
 description = "A tool-using, long-horizon LLM-agent benchmark for month-end reconciliation / close, with a deterministic ledger-replay verifier."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 # Deliberately zero runtime dependencies: the reference implementation is
 # pure Python standard library so a reviewer can run it with nothing installed.
 dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
-llm = ["pydantic-ai>=1.107.7,<2", "python-dotenv>=1.0,<2"]
+llm = ["pydantic-ai==2.57.0", "python-dotenv>=1.0,<2"]
+jev = ["pydantic-ai[typesafe]==2.57.0", "python-dotenv>=1.0,<2"]
 
 [project.scripts]
 finbalance = "finbalance.cli:main"

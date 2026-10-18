@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 from contextlib import AsyncExitStack
 from dataclasses import asdict
-from pathlib import Path
 
-from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pydantic import StrictInt
 from pydantic_ai import Agent, RunContext, Tool, ToolOutput
@@ -21,6 +17,7 @@ from pydantic_ai.usage import UsageLimits
 from .coa import build_chart_of_accounts
 from .harness import AgentSession
 from .model import JournalEntry, JournalLine
+from .model_support import chart_context, llm_configuration, make_llm_model
 from .verifier import Submission
 
 REQUEST_LIMIT = 40
@@ -28,10 +25,6 @@ REQUEST_TIMEOUT_SECONDS = 60
 
 
 def _prompt() -> str:
-    chart = [
-        {**asdict(a), "type": a.type.value, "normal_side": a.normal_side.value}
-        for a in build_chart_of_accounts()
-    ]
     return """Reconcile this synthetic company-month using only the supplied tools.
 Read the ledger, external statements, and policy before deciding on adjustments.
 Amounts are integer cents. Journal lines use nonnegative debit or credit amounts,
@@ -46,7 +39,7 @@ Use unique entry IDs. Read the final working trial balance and submit the comple
 account-code-to-natural-balance mapping with submit_reconciliation. Submit in a
 separate response after all other tool calls; submission ends the run.
 Public fixed chart of accounts:
-""" + json.dumps(chart)
+""" + chart_context()
 
 
 def query_ledger(ctx: RunContext[AgentSession], account: str | None = None) -> list[dict]:
@@ -93,36 +86,30 @@ def submit_reconciliation(
     return ctx.deps.submit_reconciliation(reported_balance_sheet)
 
 
+def build_agent(model: Model, *, capabilities=(), text_output=str) -> Agent:
+    """Shared prompt, tool contracts and termination behavior for both model adapters."""
+    return Agent(
+        model, deps_type=AgentSession, instructions=_prompt(), capabilities=capabilities,
+        tools=[Tool(fn, sequential=True) for fn in (
+            query_ledger, list_documents, read_document, get_trial_balance,
+            post_journal_entry,
+        )],
+        output_type=[ToolOutput(submit_reconciliation, name="submit_reconciliation"), text_output],
+        end_strategy="early", retries=2,
+        model_settings={"timeout": REQUEST_TIMEOUT_SECONDS, "parallel_tool_calls": False},
+    )
+
+
 class LlmAgent:
     def __init__(self, *, model: Model | None = None):
         self._client = None
         if model is None:
-            load_dotenv(Path.cwd() / ".env", override=False)
-            names = ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL")
-            missing = [name for name in names if not os.environ.get(name, "").strip()]
-            if missing:
-                raise ValueError(
-                    "Missing LLM configuration: " + ", ".join(missing)
-                    + ". Copy .env_example to .env and fill in these values."
-                )
-            client = AsyncOpenAI(
-                base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"],
-                timeout=REQUEST_TIMEOUT_SECONDS, max_retries=0,
+            model, client = make_llm_model(
+                llm_configuration(), REQUEST_TIMEOUT_SECONDS, client_factory=AsyncOpenAI,
+                provider_factory=OpenAIProvider, model_factory=OpenAIChatModel,
             )
             self._client = client
-            model = OpenAIChatModel(
-                os.environ["LLM_MODEL"], provider=OpenAIProvider(openai_client=client),
-            )
-        self._agent = Agent(
-            model, deps_type=AgentSession, instructions=_prompt(),
-            tools=[Tool(fn, sequential=True) for fn in (
-                query_ledger, list_documents, read_document, get_trial_balance,
-                post_journal_entry,
-            )],
-            output_type=[ToolOutput(submit_reconciliation, name="submit_reconciliation"), str],
-            end_strategy="early", retries=2,
-            model_settings={"timeout": REQUEST_TIMEOUT_SECONDS, "parallel_tool_calls": False},
-        )
+        self._agent = build_agent(model)
 
     def run(self, session: AgentSession) -> Submission:
         return asyncio.run(self._run(session))
