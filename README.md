@@ -56,6 +56,21 @@ catch rates:
 PYTHONPATH=src python -m finbalance.cli suite --agent baseline --seeds 0:50
 ```
 
+The suite also reports median/p95 latency and sample counts for all, submitted,
+correct (`BSrecon`), and failed runs. Only `agent.run()` is timed with
+`time.perf_counter()`; generation, setup, and scoring are excluded. P95 uses
+nearest rank: sorted sample at one-based position `ceil(0.95 * n)`.
+Per-attempt results retain scores and exceptions; failures count as unsuccessful,
+and setup failures have no latency sample.
+
+Compare agents in separate suite runs with identical `--seeds`, `--k`, and
+`--runs`, for example:
+
+```bash
+PYTHONPATH=src python -m finbalance.cli suite --agent oracle --seeds 0:20 --k 5 --runs 3
+PYTHONPATH=src python -m finbalance.cli suite --agent baseline --seeds 0:20 --k 5 --runs 3
+```
+
 **Run a multi-month campaign** — the long-horizon dimension, where the agent's own
 carried-forward balances make errors compound:
 
@@ -75,7 +90,7 @@ Run the tests (needs `pytest`):
 
 ```bash
 python -m venv .venv && ./.venv/bin/pip install pytest
-./.venv/bin/python -m pytest -q     # 31 passing
+./.venv/bin/python -m pytest -q
 ```
 
 ## How it works (three pieces)
