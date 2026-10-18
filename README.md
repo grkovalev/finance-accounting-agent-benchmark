@@ -56,46 +56,20 @@ catch rates:
 PYTHONPATH=src python -m finbalance.cli suite --agent baseline --seeds 0:50
 ```
 
-The suite reports correctness alongside `agent.run()` latency in seconds:
-median, p95, and sample count for **all attempts**, **submitted** runs (returned
-and successfully scored), **correct** runs (submitted with `BSrecon` passing),
-and **failed** runs (exceptions, including agent-raised timeouts). Correct runs
-are a subset of submitted runs. The suite records exceptions and continues;
-it does not impose a timeout itself.
+The suite also reports median/p95 latency and sample counts for all, submitted,
+correct (`BSrecon`), and failed runs. Only `agent.run()` is timed with
+`time.perf_counter()`; generation, setup, and scoring are excluded. P95 uses
+nearest rank: sorted sample at one-based position `ceil(0.95 * n)`.
+Per-attempt results retain scores and exceptions; failures count as unsuccessful,
+and setup failures have no latency sample.
 
-Timing uses `time.perf_counter()` immediately around each `agent.run()` call.
-Instance generation, fresh session and agent construction, and scoring are
-excluded. Initialize provider clients in agent setup to exclude their startup
-cost; initialization done inside `run()` is included. A run that raises still
-has elapsed time. A generation/setup failure has no latency sample, so attempt
-counts can exceed latency sample counts. An exception during scoring retains
-the measured run time and is reported as a failure.
-
-Median is the middle sorted sample, or the average of the two middle samples
-for an even count. P95 uses **nearest rank**: sorted sample at one-based position
-`ceil(0.95 * n)`, without interpolation. Empty groups show `n/a` and zero samples.
-
-`run_suite()` returns a `SuiteResult` with an `attempts` list retaining the agent,
-seed, one-based repetition, elapsed seconds (or `None`), outcome, scorecard when
-available, and exception type/message. Failed attempts count as unsuccessful in
-pass^1 and pass^k and contribute zero to mean final score and discrepancy catches.
-Trap/gate/tool-call aggregates use available scorecards with all attempts in the
-denominator; a failed attempt has no verified trap/gate/tool-call result. The
-verifier and successful-run scores are unchanged. Ground truth is passed only
-to the oracle in the suite.
-
-Compare agents by running separate suites with identical seeds, book-error count,
-and repetitions, for example:
+Compare agents in separate suite runs with identical `--seeds`, `--k`, and
+`--runs`, for example:
 
 ```bash
 PYTHONPATH=src python -m finbalance.cli suite --agent oracle --seeds 0:20 --k 5 --runs 3
 PYTHONPATH=src python -m finbalance.cli suite --agent baseline --seeds 0:20 --k 5 --runs 3
 ```
-
-Generation is deterministic and each attempt gets a fresh session and agent.
-Save the output and record the code revision and any model identifiers/settings
-alongside it. Compare quality and failure counts with latency; the submitted and
-correct latency groups alone exclude failed attempts.
 
 **Run a multi-month campaign** — the long-horizon dimension, where the agent's own
 carried-forward balances make errors compound:
